@@ -54,7 +54,7 @@ class InsideWordSyncher
 	//=============================================
 	function install()
 	{
-		InsideWordSyncher::set_IWDomain("http://www.chunkng.com");
+		InsideWordSyncher::set_IWDomain("http://www.insideword.com");
 		InsideWordSyncher::set_PublishIncrement(5);
 		InsideWordSyncher::set_SynchProgress(0);
 		if(!InsideWordSyncher::insideWord_server_setup())
