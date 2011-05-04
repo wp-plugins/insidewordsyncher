@@ -94,7 +94,7 @@ class InsideWordPressApi {
 		);
 		$message = array (
 			'body' => $body,
-			'timeout' => 7
+			'timeout' => 50
 		);
 		$response = wp_remote_post($request, $message);
 		
@@ -199,7 +199,8 @@ class InsideWordPressApi {
 		);
 		$message = array (
 			'body' => $body,
-			'cookies' => $this->get_Cookie()
+			'cookies' => $this->get_Cookie(),
+			'timeout' => 30
 		);
 		$response = wp_remote_post($request, $message);
 		if(!is_wp_error( $response ))

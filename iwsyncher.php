@@ -173,8 +173,11 @@ class InsideWordSyncher
 				}
 				else
 				{
+					// give this thing a minute to resolve
+					set_time_limit ( 60 );
 					iw_log("beginning identification request");
 					$identificationResponse = $api->domainIdentification($domain, "");
+					iw_log(print_r( $identificationResponse, true ));
 					if(is_wp_error($identificationResponse))
 					{
 						InsideWordSyncher::add_ErrorMsgList("Failed to perform domain identification: ".$identificationResponse->get_error_message());
@@ -196,6 +199,8 @@ class InsideWordSyncher
 					}
 					InsideWordSyncher::release_SynchLock();
 					iw_log("ending identification request");
+					// set the time back to normal
+					set_time_limit ( 30 );
 				}
 			}
 		}
@@ -230,10 +235,14 @@ class InsideWordSyncher
 				}
 				else
 				{
+					// give this thing a minute to resolve
+					set_time_limit ( 60 );
 					foreach($postList as $aPost)
 					{
 						InsideWordSyncher::publish_post($aPost, $api);
 					}
+					// set the time back to normal
+					set_time_limit ( 30 );
 					InsideWordSyncher::set_SynchProgress($end);
 					InsideWordSyncher::visit_request($api, 2);
 					iw_log("finished batch");
@@ -743,8 +752,9 @@ class InsideWordSyncher
 			$api->set_IWHost(InsideWordSyncher::get_IWDomain());
 			$domain = get_bloginfo('url');
 			switch($errno) {
+				case E_NOTICE:
 				case E_STRICT:
-				case 8192:
+				case E_DEPRECATED:
 					// do nothing
 					break;
 				default:
