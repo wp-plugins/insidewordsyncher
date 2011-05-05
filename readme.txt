@@ -3,7 +3,7 @@ Contributors: InsideWord
 Tags: plugin, syndication, synch, analytics, links, share, seo
 Requires at least: 3.0.0
 Tested up to: 3.1.2
-Stable tag: 0.4.4.367
+Stable tag: 0.5.0
 
 InsideWord Syncher helps promote your blog through InsideWord.com, a blog and news aggregator.
 
@@ -11,11 +11,18 @@ InsideWord Syncher helps promote your blog through InsideWord.com, a blog and ne
 
 The InsideWord Syncher plugin synchs all your public posts (password protected posts are skipped) to [InsideWord.com](http://www.insideword.com/) to help promote your blog and your content. Future releases of the plugin will provide analytics features with suggestions on what to do to improve your posts to draw more readers.
 
+We'd like to take the time to thank the many users who have downloaded this plugin so. Everyone has been very patient and supportive.
+
+As a side note, we'd also like to mention that although our site can support multiple languages, we'd advise against uploading content with non-latin characters as the site was not tested for this and we cannot guarantee that your character set will transfer over.
+
 = Current features: =
 * Synch all posts over to InsideWord.com.
 * Automatically create a [profile with InsideWord.com](http://www.insideword.com/member/profile/38/0).
 * Provide links back to your blog from InsideWord to help drive traffic back to you and help with SEO.
 * Provide the current rank for each of your posts.
+
+= Features being worked on: =
+* Automatically assign blog posts to InsideWord Categories.
 
 = Future features: =
 * More options on settings page.
@@ -61,6 +68,14 @@ The settings page currently only shows your profile link at InsideWord.com, the 
 We will do everything we can to fix the issue.
 
 == Changelog ==
+
+= 0.5.0 =
+* Disabled logging to improve plugin speed.
+* Posts will now be loaded in Ascending order, which makes more sense.
+* The plugin will automatically abort the synch process if it fails to identify the host after three attempts.
+* Posts will be loaded in batches of 2 rather than 5 to help ease the load on WordPress servers.
+* The plugin will avoid using the home page to perform identification to help ease the load on WordPress servers.
+* General clean and optimizations.
 
 = 0.4.4.366 =
 * First release
