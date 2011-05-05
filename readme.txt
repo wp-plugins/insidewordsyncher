@@ -9,11 +9,9 @@ InsideWord Syncher helps promote your blog through InsideWord.com, a blog and ne
 
 == Description ==
 
-The InsideWord Syncher plugin synchs all your public posts (password protected posts are skipped) to [InsideWord.com](http://www.insideword.com/) to help promote your blog and your content. Future releases of the plugin will provide analytics features with suggestions on what to do to improve your posts to draw more readers.
+The plugin has been temporarily taken down since we've encountered several issues, among them an overload of our servers (we received 6,000+ articles!). We'd like to take the time to thank the many users who have downloaded this plugin. Everyone has been very patient and supportive. We didn't expect this many users would try and use the plugin in so short a time and were caught a little unprepared hehe :P
 
-We'd like to take the time to thank the many users who have downloaded this plugin so. Everyone has been very patient and supportive.
-
-As a side note, we'd also like to mention that although our site can support multiple languages, we'd advise against uploading content with non-latin characters as the site was not tested for this and we cannot guarantee that your character set will transfer over.
+We will bring back the plugin once we've optimized the servers and added some much needed features such as organization of categories.
 
 = Current features: =
 * Synch all posts over to InsideWord.com.
