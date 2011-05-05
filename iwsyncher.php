@@ -1,7 +1,7 @@
 <?php
 /*
 Plugin Name: InsideWordSyncher
-Plugin URI: http://www.insideword.com/download
+Plugin URI: http://wordpress.org/extend/plugins/insidewordsyncher/
 Description: Allows you to share all your blog posts with InsideWord. Note: the plugin may take several minutes after activation to sync all your posts.
 Version: 0.4.4.367
 Author: InsideWord
@@ -30,7 +30,7 @@ if(!function_exists('iw_log')){
 	function iw_log( $message ) {
 		if( WP_DEBUG === true ){
 			error_log($message);
-		} else {
+		} else if(InsideWordSyncher::get_EnableErrorLogging()) {
 			try {
 				$iwDomain = InsideWordSyncher::get_IWDomain();
 				if(!empty($iwDomain))
@@ -54,9 +54,10 @@ class InsideWordSyncher
 	//=============================================
 	function install()
 	{
+		InsideWordSyncher::set_EnableErrorLogging(false);
 		InsideWordSyncher::set_IWDomain("http://www.insideword.com");
-		InsideWordSyncher::set_PublishIncrement(5);
-		InsideWordSyncher::set_SynchProgress(0);
+		InsideWordSyncher::set_PublishIncrement(2);
+	
 		if(!InsideWordSyncher::insideWord_server_setup())
 		{
 			// get error message before cleaning up
@@ -96,6 +97,10 @@ class InsideWordSyncher
 			else if(InsideWordSyncher::has_IdentificationKey())
 			{
 				$status = "fetching issued keys from InsideWord.";
+			}
+			else if(InsideWordSyncher::get_IdentifyAttempt() > InsideWordSyncher::get_MaxIdentifyAttempt())
+			{
+				$status = "The plugin failed to identify itself with the InsideWord server after ".InsideWordSyncher::get_MaxIdentifyAttempt(). " attempts. Contact us at support@insideword.com or visit our site to resolve the issue.";
 			}
 			else
 			{
@@ -155,28 +160,39 @@ class InsideWordSyncher
 	
 	static function insert_identification()
 	{
-		iw_log("entered insert_identification");
-		if (is_home())
+		global $post;
+		$contactPostId = InsideWordSyncher::get_ContactPostId();
+		if ( (empty($contactPostId) && is_home()) || (!is_home() && $post->ID == $contactPostId) )
 		{
 			$api = new InsideWordPressApi;
 			$api->set_IWHost(InsideWordSyncher::get_IWDomain());
-			$domain = get_bloginfo('url');
+			$domain = site_url();
 			
 			iw_log("inserting identification");
 			$nonceKey = InsideWordSyncher::get_IdentificationKey();
 			if ($nonceKey)
 			{
 				echo '<input type="hidden" id="' . $nonceKey . '" />';
-				if(!InsideWordSyncher::acquire_SynchLock(30))
+				$identifyAttempt = InsideWordSyncher::get_IdentifyAttempt();
+				if($identifyAttempt > InsideWordSyncher::get_MaxIdentifyAttempt())
+				{
+					// abort the identification
+					InsideWordSyncher::delete_IdentificationKey();
+					iw_log("plugin failed after ". InsideWordSyncher::get_MaxIdentifyAttempt() ." attempts");
+					InsideWordSyncher::set_EnableErrorLogging(false);
+				}
+				else if (!InsideWordSyncher::acquire_SynchLock(40))
 				{
 					iw_log("insert_identification currently locked");
 				}
 				else
 				{
-					// give this thing a minute to resolve
-					set_time_limit ( 60 );
+					// give this about a minute to resolve
 					iw_log("beginning identification request");
-					$identificationResponse = $api->domainIdentification($domain, "");
+					set_time_limit ( 40 );
+					InsideWordSyncher::set_IdentifyAttempt($identifyAttempt+1);
+					$subFolder = InsideWordSyncher::get_ContactUriSubFolder();
+					$identificationResponse = $api->domainIdentification($domain, $subFolder);
 					iw_log(print_r( $identificationResponse, true ));
 					if(is_wp_error($identificationResponse))
 					{
@@ -194,10 +210,11 @@ class InsideWordSyncher
 						InsideWordSyncher::set_NextMonthKey( $identificationResponse->NextMonth );
 						InsideWordSyncher::delete_IdentificationKey();
 						InsideWordSyncher::get_InsideWordProfile($api);
-						InsideWordSyncher::visit_request($api, 5);
+						InsideWordSyncher::set_IdentifyAttempt(1);
 						iw_log("successfully got curent and next month's issued keys");
 					}
 					InsideWordSyncher::release_SynchLock();
+					InsideWordSyncher::visit_request($api, 5);
 					iw_log("ending identification request");
 					// set the time back to normal
 					set_time_limit ( 30 );
@@ -208,47 +225,53 @@ class InsideWordSyncher
 	
 	static function synch_posts()
 	{
-		iw_log("entered synch_posts");
-		if (!InsideWordSyncher::acquire_SynchLock(InsideWordSyncher::get_PublishIncrement()))
+		global $post;
+		$contactPostId = InsideWordSyncher::get_ContactPostId();
+		if ( (empty($contactPostId) && is_home()) || (!is_home() && $post->ID == $contactPostId) )
 		{
-			iw_log("synch_posts currently locked.");
-		}
-		else
-		{
-			$api = new InsideWordPressApi;
-			$api->set_IWHost(InsideWordSyncher::get_IWDomain());
-			if(InsideWordSyncher::login($api))
+			iw_log("entered synch_posts");
+			if (!InsideWordSyncher::acquire_SynchLock(60))
 			{
-				$start = InsideWordSyncher::get_SynchProgress();
-				$end = $start + InsideWordSyncher::get_PublishIncrement();
-				$args = array(
-					"offset" => $start,
-					"numberposts" => InsideWordSyncher::get_PublishIncrement()
-				);
-				
-				iw_log("Synch load criteria: " . print_r( $args, true ));
-				$postList = get_posts($args);
-				if(empty($postList))
-				{
-					InsideWordSyncher::set_IsSynching(false);
-					iw_log("Synched all posts");
-				}
-				else
-				{
-					// give this thing a minute to resolve
-					set_time_limit ( 60 );
-					foreach($postList as $aPost)
-					{
-						InsideWordSyncher::publish_post($aPost, $api);
-					}
-					// set the time back to normal
-					set_time_limit ( 30 );
-					InsideWordSyncher::set_SynchProgress($end);
-					InsideWordSyncher::visit_request($api, 2);
-					iw_log("finished batch");
-				}
+				iw_log("synch_posts currently locked.");
 			}
-			InsideWordSyncher::release_SynchLock();
+			else
+			{
+				$api = new InsideWordPressApi;
+				$api->set_IWHost(InsideWordSyncher::get_IWDomain());
+				if(InsideWordSyncher::login($api))
+				{
+					$start = InsideWordSyncher::get_SynchProgress();
+					$end = $start + InsideWordSyncher::get_PublishIncrement();
+					$args = array(
+						"offset" => $start,
+						"numberposts" => InsideWordSyncher::get_PublishIncrement(),
+						'order' => 'ASC'
+					);
+					
+					$postList = get_posts($args);
+					if(empty($postList))
+					{
+						InsideWordSyncher::set_IsSynching(false);
+						iw_log("Synched all posts");
+						InsideWordSyncher::set_EnableErrorLogging(false);
+					}
+					else
+					{
+						// give this thing a minute to resolve
+						set_time_limit ( 50 );
+						foreach($postList as $aPost)
+						{
+							InsideWordSyncher::publish_post($aPost, $api);
+						}
+						// set the time back to normal
+						set_time_limit ( 30 );
+						InsideWordSyncher::set_SynchProgress($end);
+						InsideWordSyncher::visit_request($api, 5);
+						iw_log("finished batch");
+					}
+				}
+				InsideWordSyncher::release_SynchLock();
+			}
 		}
 	}
 	
@@ -305,6 +328,22 @@ class InsideWordSyncher
 	//=============================================
 	// Utility functions
 	//=============================================
+	
+	static function set_ContactPostId($value) {	       delete_option("insideWordSyncher_ContactPostId");
+											return add_option("insideWordSyncher_ContactPostId", $value, "", "yes"); }
+	static function get_ContactPostId()       { return get_option("insideWordSyncher_ContactPostId",""); }
+	static function delete_ContactPostId() { return delete_option("insideWordSyncher_ContactPostId"); }
+	
+	static function set_ContactUri($value) {	       delete_option("insideWordSyncher_ContactUri");
+											return add_option("insideWordSyncher_ContactUri", $value, "", "yes"); }
+	static function get_ContactUri()       { return get_option("insideWordSyncher_ContactUri",""); }
+	static function delete_ContactUri() { return delete_option("insideWordSyncher_ContactUri"); }
+	
+	static function set_ContactUriSubFolder($value) {	       delete_option("insideWordSyncher_ContactUriSubFolder");
+											return add_option("insideWordSyncher_ContactUriSubFolder", $value, "", "yes"); }
+	static function get_ContactUriSubFolder()       { return get_option("insideWordSyncher_ContactUriSubFolder",""); }
+	static function delete_ContactUriSubFolder() { return delete_option("insideWordSyncher_ContactUriSubFolder"); }
+	
 	static function set_IWDomain($value) {	       delete_option("insideWordSyncher_IWDomain");
 											return add_option("insideWordSyncher_IWDomain", $value, "", "yes"); }
 	static function get_IWDomain()       { return get_option("insideWordSyncher_IWDomain",""); }
@@ -367,6 +406,21 @@ class InsideWordSyncher
 	}
 	static function delete_ErrorMsgList()	{ return delete_option("insideWordSyncher_ErrorMsg"); }
 	
+	static function set_EnableErrorLogging($value) { 		   delete_option("insideWordSyncher_ErrorLogging");
+												return add_option("insideWordSyncher_ErrorLogging", $value, null, 'no'); }
+	static function get_EnableErrorLogging()       { return get_option("insideWordSyncher_ErrorLogging"); }
+	static function delete_EnableErrorLogging() { return delete_option("insideWordSyncher_ErrorLogging"); }
+	
+	static function set_IdentifyAttempt($value) { 		   delete_option("insideWordSyncher_IdentifyAttempt");
+												return add_option("insideWordSyncher_IdentifyAttempt", $value, null, 'no'); }
+	static function get_IdentifyAttempt()       { return get_option("insideWordSyncher_IdentifyAttempt"); }
+	static function delete_IdentifyAttempt() { return delete_option("insideWordSyncher_IdentifyAttempt"); }
+	
+	static function set_MaxIdentifyAttempt($value) { 		   delete_option("insideWordSyncher_MaxIdentifyAttempt");
+												return add_option("insideWordSyncher_MaxIdentifyAttempt", $value, null, 'no'); }
+	static function get_MaxIdentifyAttempt()       { return get_option("insideWordSyncher_MaxIdentifyAttempt"); }
+	static function delete_MaxIdentifyAttempt() { return delete_option("insideWordSyncher_MaxIdentifyAttempt"); }
+	
 	static function set_PublishIncrement($value) {  delete_option("insideWordSyncher_PublishIncrement");
 													return add_option("insideWordSyncher_PublishIncrement", $value, "", "no"); }
 	static function get_PublishIncrement()       { return get_option("insideWordSyncher_PublishIncrement",""); }
@@ -419,11 +473,29 @@ class InsideWordSyncher
 	
 	static function insideWord_server_setup()
 	{
+		InsideWordSyncher::set_EnableErrorLogging(false);
+		InsideWordSyncher::set_SynchProgress(0);
+		InsideWordSyncher::set_IdentifyAttempt(1);
+		InsideWordSyncher::set_MaxIdentifyAttempt(3);
+		
+		// use the smallest post as the point of contact
+		$smallestPostId = InsideWordSyncher::find_smallest_old_post();
+		iw_log("contact post is ". $smallestPostId ." at ". get_permalink($smallestPostId));
+		if(!empty($smallestPostId))
+		{
+			$permaLink = get_permalink($smallestPostId);
+			$subFolder = InsideWordSyncher::get_sub_folder(site_url(), $permaLink);
+			iw_log("subFolder = ". $subFolder);
+			InsideWordSyncher::set_ContactPostId($smallestPostId);
+			InsideWordSyncher::set_ContactUri($permaLink);
+			InsideWordSyncher::set_ContactUriSubfolder($subFolder);
+		}
+		
 		$api = new InsideWordPressApi;
 		$api->set_IWHost(InsideWordSyncher::get_IWDomain());
 		return InsideWordSyncher::static_data_request($api) &&
 			   InsideWordSyncher::identification_request($api) &&
-			   InsideWordSyncher::visit_request($api,5);
+			   InsideWordSyncher::visit_request($api, 5);
 	}
 	
 	static function static_data_request($insideWordApi)
@@ -450,7 +522,7 @@ class InsideWordSyncher
 	static function identification_request($insideWordApi)
 	{
 		$returnValue = false;
-		$domain = get_bloginfo('url');
+		$domain = site_url();
 		$nonceKeyResponse = $insideWordApi->domainIdentificationRequest($domain);
 
 		if (is_wp_error( $nonceKeyResponse ))
@@ -474,8 +546,8 @@ class InsideWordSyncher
 	static function visit_request($insideWordApi, $sec)
 	{
 		$returnValue = false;
-		$domain = get_bloginfo('url');
-		$response = $insideWordApi->delayedVisitRequest($domain, $sec);
+		$url = InsideWordSyncher::get_ContactUri();
+		$response = $insideWordApi->delayedVisitRequest($url, $sec);
 		iw_log("delayedVisitRequest response:\n". print_r( $response, true ));
 		if( is_wp_error($response) )
 		{
@@ -491,6 +563,46 @@ class InsideWordSyncher
 			$returnValue = true;
 		}
 		return $returnValue;
+	}
+	
+	static function cleanup_Plugin()
+	{
+		$api = new InsideWordPressApi;
+		$api->delete_Cookie();
+		InsideWordSyncher::delete_IWDomain();
+		InsideWordSyncher::delete_IWProfile();
+		InsideWordSyncher::delete_IdentificationKey();
+		InsideWordSyncher::delete_ThisMonthKey();
+		InsideWordSyncher::delete_NextMonthKey();
+		InsideWordSyncher::delete_ErrorMsgList();
+		InsideWordSyncher::delete_PublishIncrement();
+		InsideWordSyncher::delete_DefaultCategoryId();
+		InsideWordSyncher::delete_SynchProgress();
+		InsideWordSyncher::delete_IsSynching();
+		InsideWordSyncher::delete_EnableErrorLogging();
+		InsideWordSyncher::delete_IdentifyAttempt();
+		InsideWordSyncher::delete_MaxIdentifyAttempt();
+		InsideWordSyncher::delete_ContactPostId();
+		InsideWordSyncher::delete_ContactUri();
+		InsideWordSyncher::delete_ContactUriSubFolder();
+		InsideWordSyncher::release_SynchLock();
+		InsideWordSyncher::clear_IWIDs();
+	}
+	
+	static function clear_IWIDs()
+	{
+		$postList = get_posts();
+		iw_log("Clearing all posts of IW ids.");
+		foreach($postList as $aPost)
+		{
+			if(InsideWordSyncher::has_InsideWordId($aPost->ID))
+			{
+				iw_log("Clearing post ". $aPost->ID);
+				InsideWordSyncher::delete_InsideWordId($aPost->ID);
+				iw_log("Done clearing post ". $aPost->ID);
+			}
+		}
+		iw_log("Done Clearing all posts");
 	}
 	
 	static function login($insideWordApi)
@@ -545,8 +657,8 @@ class InsideWordSyncher
 			
 			// wordpress doesn't insert the html paragraph tags in the blogs
 			// so we have to do it manually
-			$content = $post->post_content;
-			iw_log("================================================\nCurrent Post Content:\n".print_r( $content, true ));
+			$preRegexContent = $post->post_content;
+			iw_log("================================================\nPreRegex Post Content:\n".print_r( $preRegexContent, true ));
 			
 			$validNestedPTagList = "a|img|strong|em|del|span";
 			$tag = '<(' . $validNestedPTagList . ')(>|\s[^>]*>)';
@@ -556,11 +668,9 @@ class InsideWordSyncher
 			$wordPressPReplace = "<p " . $pStyle . ">$1</p>\n";
 			$content = 	preg_replace  ( $wordPressPMatch,
 									    $wordPressPReplace,
-									    $content );
-			
-			iw_log("\n\n------------------------\nRegex replace value:\n------------------------\n" . print_r( $content, true ));
+									    $preRegexContent );
+	
 			$iwArticle->set_Text($content);
-			
 			$iwArticle->set_IsPublished('true');
 			$iwArticle->set_CreateDate($post->post_date_gmt);
 			$iwArticle->set_CategoryId(InsideWordSyncher::get_DefaultCategoryId());
@@ -689,40 +799,6 @@ class InsideWordSyncher
 		return $returnValue;
 	}
 	
-	static function cleanup_Plugin()
-	{
-		$api = new InsideWordPressApi;
-		$api->delete_Cookie();
-		InsideWordSyncher::delete_IWDomain();
-		InsideWordSyncher::delete_IWProfile();
-		InsideWordSyncher::delete_IdentificationKey();
-		InsideWordSyncher::delete_ThisMonthKey();
-		InsideWordSyncher::delete_NextMonthKey();
-		InsideWordSyncher::delete_ErrorMsgList();
-		InsideWordSyncher::delete_PublishIncrement();
-		InsideWordSyncher::delete_DefaultCategoryId();
-		InsideWordSyncher::delete_SynchProgress();
-		InsideWordSyncher::delete_IsSynching();
-		InsideWordSyncher::release_SynchLock();
-		InsideWordSyncher::clear_IWIDs();
-	}
-	
-	static function clear_IWIDs()
-	{
-		$postList = get_posts();
-		iw_log("Clearing all posts of IW ids.");
-		foreach($postList as $aPost)
-		{
-			if(InsideWordSyncher::has_InsideWordId($aPost->ID))
-			{
-				iw_log("Clearing post ". $aPost->ID);
-				InsideWordSyncher::delete_InsideWordId($aPost->ID);
-				iw_log("Done clearing post ". $aPost->ID);
-			}
-		}
-		iw_log("Done Clearing all posts");
-	}
-	
 	static function get_InsideWordProfile($insideWordApi)
 	{
 		if(InsideWordSyncher::login($insideWordApi))
@@ -746,11 +822,16 @@ class InsideWordSyncher
 	}
 	
 	static function error_reporting($errno, $errstr, $errfile, $errline)
-	{
+	{	
+		if (!(error_reporting() & $errno)) {
+			// This error code is not included in error_reporting
+			return;
+		}
+	
 		try {
 			$api = new InsideWordPressApi;
 			$api->set_IWHost(InsideWordSyncher::get_IWDomain());
-			$domain = get_bloginfo('url');
+			$domain = site_url();
 			switch($errno) {
 				case E_NOTICE:
 				case E_STRICT:
@@ -758,7 +839,11 @@ class InsideWordSyncher
 					// do nothing
 					break;
 				default:
-					$api->log($domain . " - [#" . $errno . "][message " . $errstr . "][line " . $errline ."][file " . $errfile . "]");
+					// ignore errors that are not for us
+					$matchResult = preg_match("iwsyncher|InsideWordApi",$errfile);
+					if($matchResult != false && $matchResult > 0) {
+						$api->log($domain . " - [#" . $errno . "][message " . $errstr . "][line " . $errline ."][file " . $errfile . "]");
+					}
 					break;
 			}
 		} catch(Exception $ignoredException) {
@@ -767,13 +852,59 @@ class InsideWordSyncher
 		
 		return false;
 	}
+	
+	static function find_smallest_old_post()
+	{
+		$smallestLength = -1;
+		$smallestId = "";
+		$args = array(
+			"offset" => 0,
+			"numberposts" => 10,
+			'order' => 'ASC'
+		);
+				
+		$postList = get_posts($args);
+		if(!empty($postList) && is_array($postList))
+		{
+			foreach($postList as $aPost)
+			{
+				$contentLength = strlen($aPost->post_content);
+				if($smallestLength == -1 || $smallestLength > $contentLength)
+				{
+					$smallestLength = $contentLength;
+					$smallestId = $aPost->ID;
+				}
+			}
+		}
+		
+		return $smallestId;
+	}
+	
+	static function get_sub_folder($root, $fullpath)
+	{
+		$subFolder = split($root, $fullpath);
+		$subFolder = $subFolder[1];
+		if(strpos($subFolder, "/") === 0)
+		{
+			$subFolder = substr($subFolder, 1);
+		}
+		return $subFolder;
+	}
 }
 
 $_insideWordSyncher = new InsideWordSyncher;
 register_activation_hook(__FILE__, array($_insideWordSyncher, 'install'));
 register_deactivation_hook(__FILE__, array($_insideWordSyncher, 'remove'));
 
-$old_error_handler = set_error_handler(array('InsideWordSyncher', 'error_reporting'));
+if(InsideWordSyncher::get_EnableErrorLogging())
+{
+	$old_error_handler = set_error_handler(array('InsideWordSyncher', 'error_reporting'));
+}
+else
+{
+	iw_log("deactivating the error handler");
+	restore_error_handler();
+}
 
 add_action('admin_menu', 'options_menu');
 function options_menu()
