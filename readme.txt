@@ -3,7 +3,7 @@ Contributors: InsideWord
 Tags: plugin, syndication, synch, analytics, links, share, seo
 Requires at least: 3.0.0
 Tested up to: 3.1.2
-Stable tag: 0.5.0
+Stable tag: 0.5.0.0
 
 InsideWord Syncher helps promote your blog through InsideWord.com, a blog and news aggregator.
 
@@ -69,7 +69,7 @@ We will do everything we can to fix the issue.
 
 == Changelog ==
 
-= 0.5.0 =
+= 0.5.0.0 =
 * Disabled logging to improve plugin speed.
 * Posts will now be loaded in Ascending order, which makes more sense.
 * The plugin will automatically abort the synch process if it fails to identify the host after three attempts.
