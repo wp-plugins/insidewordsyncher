@@ -9,6 +9,7 @@ InsideWord Syncher helps promote your blog through InsideWord.com, a blog and ne
 
 == Description ==
 
+= READ THIS FIRST =
 The plugin has been temporarily taken down since we've encountered several issues, among them an overload of our servers (we received 6,000+ articles!). We'd like to take the time to thank the many users who have downloaded this plugin. Everyone has been very patient and supportive. We didn't expect this many users would try and use the plugin in so short a time and were caught a little unprepared hehe :P
 
 We will bring back the plugin once we've optimized the servers and added some much needed features such as organization of categories.
